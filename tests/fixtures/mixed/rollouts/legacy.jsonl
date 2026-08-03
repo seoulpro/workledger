@@ -1,0 +1,2 @@
+{"timestamp":"2024-01-01T00:00:00Z","type":"session_meta","session_id":"legacy-session","cwd":"C:\\Users\\example\\projects\\legacy"}
+{"timestamp":"2024-01-01T00:01:00Z","type":"message","role":"assistant","content":"결정: JSONL을 한 줄씩 읽습니다.\n할 일: 오래된 어댑터를 검증합니다."}

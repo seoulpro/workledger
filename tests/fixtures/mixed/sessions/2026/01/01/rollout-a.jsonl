@@ -1,0 +1,10 @@
+{"timestamp":"2026-01-01T10:00:00Z","type":"session_meta","payload":{"id":"00000000-0000-4000-8000-000000000001","timestamp":"2026-01-01T10:00:00Z","cwd":"/home/example/projects/alpha","cli_version":"0.200.0","git":{"branch":"feat/local-index","commit_hash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}}
+{"timestamp":"2026-01-01T10:00:01Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"DECISION: Use SQLite for the local index.\nTODO: Add incremental scanning.\nAPPROVAL PENDING: Publish package.\nBLOCKED: Deployment needs credentials.\nTODO: Review /home/example/private/config.env before sharing."}]}}
+{"timestamp":"2026-01-01T10:00:02Z","type":"response_item","payload":{"type":"function_call","name":"exec_command","call_id":"call-commit","arguments":"{\"cmd\":\"git commit -m 'Add scanner'\"}"}}
+{"timestamp":"2026-01-01T10:00:03Z","type":"response_item","payload":{"type":"function_call_output","call_id":"call-commit","output":"[main abcdef123456] Add scanner\n 2 files changed"}}
+{"timestamp":"2026-01-01T10:00:04Z","type":"response_item","payload":{"type":"function_call","name":"exec_command","call_id":"call-deploy","arguments":"{\"cmd\":\"render deploy\"}"}}
+{"timestamp":"2026-01-01T10:00:05Z","type":"response_item","payload":{"type":"function_call_output","call_id":"call-deploy","output":"Deployment succeeded and service is ready"}}
+{"timestamp":"2026-01-01T10:00:06Z","type":"compacted","payload":{"message":"TODO: Add Windows path tests.","replacement_history":[{"type":"message","role":"assistant","content":"DECISION: Use SQLite for the local index."}],"window_number":2}}
+{"timestamp":"2026-01-01T10:00:07Z","type":"event_msg","payload":{"type":"turn_aborted","reason":"Interrupted before release notes were checked","turn_id":"turn-1"}}
+{"timestamp":"2026-01-01T10:00:08Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"partial"}]}}
+{"timestamp":"2026-01-01T10:00:09Z","type":"response_item"

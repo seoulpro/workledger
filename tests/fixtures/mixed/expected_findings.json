@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "projects": {
+    "alpha": [
+      {"category": "approval", "status": "granted", "summary": "Publish package."},
+      {"category": "blocker", "status": "resolved", "summary": "Deployment needs credentials."},
+      {"category": "branch", "status": "observed", "summary": "Git branch observed: feat/local-index"},
+      {"category": "commit", "status": "observed", "summary": "Session Git commit observed: aaaaaaaaaaaa"},
+      {"category": "commit", "status": "verified", "summary": "Git commit completed: abcdef123456"},
+      {"category": "decision", "status": "accepted", "summary": "Use SQLite for the local index."},
+      {"category": "deployment", "status": "succeeded", "summary": "Deployment action succeeded"},
+      {"category": "task", "status": "done", "summary": "Add incremental scanning."},
+      {"category": "task", "status": "open", "summary": "Add Windows path tests."},
+      {"category": "task", "status": "open", "summary": "Review [PATH] before sharing."},
+      {"category": "task", "status": "unknown", "summary": "Interrupted before release notes were checked"}
+    ],
+    "legacy": [
+      {"category": "decision", "status": "accepted", "summary": "JSONL을 한 줄씩 읽습니다."},
+      {"category": "task", "status": "open", "summary": "오래된 어댑터를 검증합니다."}
+    ]
+  }
+}

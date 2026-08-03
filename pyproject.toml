@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "workledger"
+version = "0.1.0a1"
+description = "Local-first reconstruction of decisions and unfinished work from Codex sessions"
+requires-python = ">=3.10"
+authors = [{ name = "seoulpro", email = "lim@limsumin.com" }]
+license = "MIT"
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+]
+dependencies = []
+
+[project.scripts]
+workledger = "workledger.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.coverage.run]
+branch = true
+source = ["workledger"]
