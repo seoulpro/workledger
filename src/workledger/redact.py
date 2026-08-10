@@ -15,7 +15,21 @@ _RULES: tuple[tuple[re.Pattern[str], str], ...] = (
         r"\1=[REDACTED]",
     ),
     (re.compile(r"(?i)\bBearer\s+[A-Za-z0-9._~+/=-]+"), "Bearer [REDACTED]"),
-    (re.compile(r"\b(?:sk|pk|ghp|github_pat|glpat)-[A-Za-z0-9_-]{8,}\b"), "[TOKEN]"),
+    (
+        re.compile(
+            r"\b(?:"
+            r"gh[pousr]_[A-Za-z0-9]{20,}|"
+            r"github_pat_[A-Za-z0-9_]{20,}|"
+            r"npm_[A-Za-z0-9]{20,}|"
+            r"(?:AKIA|ASIA)[A-Z0-9]{16}|"
+            r"AIza[0-9A-Za-z_-]{35}|"
+            r"xox[baprs]-[A-Za-z0-9-]{10,}|"
+            r"(?:sk|rk)_(?:live|test)_[A-Za-z0-9]{16,}|"
+            r"(?:sk|pk|glpat)-[A-Za-z0-9_-]{8,}"
+            r")\b"
+        ),
+        "[TOKEN]",
+    ),
     (
         re.compile(r"(?i)([?&](?:token|key|secret|signature|auth)=)[^&#\s]+"),
         r"\1[REDACTED]",
