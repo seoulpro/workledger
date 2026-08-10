@@ -9,7 +9,7 @@ from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator, TextIO
 
 from .model import Diagnostic, ScanStats
 from .redact import safe_ref
@@ -36,6 +36,21 @@ _IGNORED_EVENT_TYPES = frozenset(
     }
 )
 _IGNORED_RESPONSE_TYPES = frozenset({"reasoning", "tool_search_call", "tool_search_output"})
+
+
+def _bounded_lines(handle: TextIO) -> Iterator[tuple[int, str | None]]:
+    line_number = 0
+    while True:
+        chunk = handle.readline(MAX_LINE_CHARS + 1)
+        if not chunk:
+            return
+        line_number += 1
+        if len(chunk) > MAX_LINE_CHARS:
+            while chunk and not chunk.endswith("\n"):
+                chunk = handle.readline(MAX_LINE_CHARS + 1)
+            yield line_number, None
+            continue
+        yield line_number, chunk
 
 
 @dataclass(slots=True)
@@ -72,6 +87,7 @@ class SessionAdapter:
 
     def __init__(self, root: Path, *, include_unindexed: bool = False):
         self.root = root.expanduser()
+        self._root_boundary = self.root.resolve(strict=False)
         self.include_unindexed = include_unindexed
         self.stats = ScanStats()
         self._diagnostics: Counter[tuple[str, str, str | None]] = Counter()
@@ -132,24 +148,26 @@ class SessionAdapter:
         candidates: set[Path] = set()
         for directory_name in ("sessions", "archived_sessions", "rollouts"):
             directory = self.root / directory_name
-            if directory.is_dir():
-                candidates.update(path for path in directory.rglob("*.jsonl") if path.is_file())
+            if self._is_source_directory(directory):
+                candidates.update(
+                    path for path in directory.rglob("*.jsonl") if self._is_source_file(path)
+                )
         for filename in ("rollout.jsonl", "sessions.jsonl"):
             path = self.root / filename
-            if path.is_file():
+            if self._is_source_file(path):
                 candidates.add(path)
         return sorted(candidates, key=lambda path: path.as_posix())
 
     def _read_indexes(self) -> None:
         candidates = [self.root / "session_index.jsonl", self.root / "sessions" / "index.jsonl"]
         for path in candidates:
-            if not path.is_file():
+            if not self._is_source_file(path):
                 continue
             self.stats.index_files_seen += 1
             try:
                 with path.open("r", encoding="utf-8", errors="replace") as handle:
-                    for line in handle:
-                        if len(line) > MAX_LINE_CHARS:
+                    for _, line in _bounded_lines(handle):
+                        if line is None:
                             self.stats.malformed_records += 1
                             self._note("oversized_index_record", "warning", "An oversized index record was skipped.")
                             continue
@@ -180,10 +198,6 @@ class SessionAdapter:
         fallback_ref = safe_ref(str(path), prefix="s")
         try:
             for line_number, line in self._candidate_lines(path):
-                if len(line) > MAX_LINE_CHARS:
-                    self.stats.malformed_records += 1
-                    self._note("oversized_record", "warning", "An oversized JSONL record was skipped.")
-                    continue
                 if self._fast_ignored(line):
                     self.stats.unsupported_records += 1
                     continue
@@ -245,18 +259,22 @@ class SessionAdapter:
 
     def _candidate_lines(self, path: Path):
         with path.open("r", encoding="utf-8", errors="replace") as handle:
-            for line_number, line in enumerate(handle, 1):
+            for line_number, line in _bounded_lines(handle):
                 self.stats.records_seen += 1
+                if line is None:
+                    self.stats.malformed_records += 1
+                    self._note("oversized_record", "warning", "An oversized JSONL record was skipped.")
+                    continue
                 yield line_number, line
 
     def _adapt_metadata_only(self, path: Path) -> list[CanonicalRecord]:
         try:
             with path.open("r", encoding="utf-8", errors="replace") as handle:
-                for line_number, line in enumerate(handle, 1):
+                for line_number, line in _bounded_lines(handle):
                     self.stats.records_seen += 1
                     if line_number > 20:
                         break
-                    if len(line) > MAX_LINE_CHARS:
+                    if line is None:
                         self.stats.malformed_records += 1
                         self._note("oversized_record", "warning", "An oversized JSONL record was skipped.")
                         continue
@@ -302,6 +320,37 @@ class SessionAdapter:
             return []
         self._note("metadata_missing", "warning", "An unindexed rollout had no readable session metadata.")
         return []
+
+    def _is_source_directory(self, path: Path) -> bool:
+        if not path.exists() and not path.is_symlink():
+            return False
+        if path.is_symlink() or not path.is_dir() or not self._is_within_root(path):
+            self._note(
+                "unsafe_source_path",
+                "warning",
+                "A symlinked or out-of-root session source path was skipped.",
+            )
+            return False
+        return True
+
+    def _is_source_file(self, path: Path) -> bool:
+        if not path.exists() and not path.is_symlink():
+            return False
+        if path.is_symlink() or not path.is_file() or not self._is_within_root(path):
+            self._note(
+                "unsafe_source_path",
+                "warning",
+                "A symlinked or out-of-root session source path was skipped.",
+            )
+            return False
+        return True
+
+    def _is_within_root(self, path: Path) -> bool:
+        try:
+            path.resolve(strict=True).relative_to(self._root_boundary)
+        except (OSError, RuntimeError, ValueError):
+            return False
+        return True
 
     @staticmethod
     def _file_identity(parsed: list[tuple[int, dict[str, Any], str]]) -> tuple[str | None, str | None]:
