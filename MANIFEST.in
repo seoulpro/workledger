@@ -1,3 +1,4 @@
+include CHANGELOG.md
 include docs/extraction-contract.md
 include scripts/evaluate.py
 recursive-include tests *.py *.json *.jsonl
