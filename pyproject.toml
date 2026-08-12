@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -8,14 +8,21 @@ version = "0.1.0a1"
 description = "Local-first reconstruction of decisions and unfinished work from Codex sessions"
 readme = "README.md"
 requires-python = ">=3.10"
-authors = [{ name = "seoulpro", email = "lim@limsumin.com" }]
+authors = [{ name = "Sumin Lim", email = "lim@limsumin.com" }]
 license = "MIT"
+license-files = ["LICENSE"]
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3 :: Only",
 ]
 dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/seoulpro/workledger"
+Repository = "https://github.com/seoulpro/workledger"
+Issues = "https://github.com/seoulpro/workledger/issues"
+Changelog = "https://github.com/seoulpro/workledger/blob/main/CHANGELOG.md"
 
 [project.scripts]
 workledger = "workledger.cli:main"
