@@ -1,0 +1,37 @@
+name: Feature request
+description: Propose a source adapter, extraction rule, output field, or CLI capability.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Source records are read-only, fixtures are synthetic, and output is intentionally
+        privacy-preserving. Please account for those boundaries in the proposal.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: Describe the workflow or source behavior that the current release cannot address.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed change
+      description: Describe the interface, retained data, and compatibility implications.
+    validations:
+      required: true
+  - type: textarea
+    id: privacy
+    attributes:
+      label: Privacy and read-only considerations
+      description: Explain what would be read, retained, emitted, cached, or probed.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Describe current commands, post-processing, or narrower approaches you considered.
+    validations:
+      required: false
