@@ -41,7 +41,8 @@ class CacheTests(unittest.TestCase):
             self.assertEqual(loaded.status, "hit")
             assert loaded.report is not None
             self.assertEqual(loaded.report.to_dict(), report.to_dict())
-            self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+            if os.name == "posix":
+                self.assertEqual(path.stat().st_mode & 0o777, 0o600)
             self.assertNotIn(str(FIXTURE_ROOT.resolve()), serialized)
             self.assertNotIn("thread_name", serialized)
             self.assertNotIn("/home/example", serialized)
