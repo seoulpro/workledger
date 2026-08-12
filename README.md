@@ -17,7 +17,7 @@ derived, redacted scan snapshot so repeated queries do not need to parse the com
 WorkLedger requires Python 3.10 or newer and has no runtime dependencies.
 
 ```bash
-python -m pip install workledger==0.1.0a1
+python -m pip install session-workledger==0.1.0a1
 ```
 
 From a source checkout, install it in editable mode or run it directly:
