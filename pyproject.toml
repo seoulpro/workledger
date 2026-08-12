@@ -3,7 +3,7 @@ requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "workledger"
+name = "session-workledger"
 version = "0.1.0a1"
 description = "Local-first reconstruction of decisions and unfinished work from Codex sessions"
 readme = "README.md"
