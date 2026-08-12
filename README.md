@@ -17,12 +17,13 @@ derived, redacted scan snapshot so repeated queries do not need to parse the com
 WorkLedger requires Python 3.10 or newer and has no runtime dependencies.
 
 ```bash
-python -m pip install -e .
+python -m pip install workledger==0.1.0a1
 ```
 
-It can also run directly from a source checkout:
+From a source checkout, install it in editable mode or run it directly:
 
 ```bash
+python -m pip install -e .
 PYTHONPATH=src python -m workledger scan
 ```
 
@@ -85,7 +86,7 @@ the session identity, and the suffix is the JSONL line. Neither the source filen
 absolute path is emitted.
 
 The complete extraction and reduction contract is documented in
-[`docs/extraction-contract.md`](docs/extraction-contract.md).
+[`docs/extraction-contract.md`](https://github.com/seoulpro/workledger/blob/main/docs/extraction-contract.md).
 
 ## Extraction behavior
 
