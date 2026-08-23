@@ -142,7 +142,7 @@ def _stat_signature(metadata: os.stat_result) -> tuple[int, int, int, int, int]:
         metadata.st_ino,
         metadata.st_size,
         metadata.st_mtime_ns,
-        metadata.st_ctime_ns,
+        0 if os.name == "nt" else metadata.st_ctime_ns,
     )
 
 
