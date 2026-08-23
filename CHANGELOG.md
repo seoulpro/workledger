@@ -4,7 +4,7 @@ This file records notable user-visible changes to WorkLedger.
 
 ## [Unreleased]
 
-The next package version is `0.1.0a2`.
+## [0.1.0a2] - 2026-08-23
 
 ### Changed
 
@@ -60,5 +60,6 @@ The next package version is `0.1.0a2`.
 - Bound physical JSONL reads before parsing oversized records.
 - Mask common provider tokens and sensitive URL parameters in retained excerpts.
 
-[Unreleased]: https://github.com/seoulpro/workledger/compare/v0.1.0a1...HEAD
+[Unreleased]: https://github.com/seoulpro/workledger/compare/v0.1.0a2...HEAD
+[0.1.0a2]: https://github.com/seoulpro/workledger/releases/tag/v0.1.0a2
 [0.1.0a1]: https://github.com/seoulpro/workledger/releases/tag/v0.1.0a1
