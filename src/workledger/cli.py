@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Sequence
 
 from . import __version__
-from .cache import CacheError, load_report, write_report
+from .cache import CacheError, cache_supported, load_report, write_report
 from .redact import redact
 from .render import render_project, render_projects, render_scan, render_unfinished
 from .scanner import resolve_source_root, scan
@@ -50,11 +50,20 @@ def _add_common(parser: argparse.ArgumentParser, *, suppress_defaults: bool = Fa
         default=argparse.SUPPRESS if suppress_defaults else False,
         help="emit machine-readable JSON",
     )
-    parser.add_argument(
-        "--no-git-probe",
+    git_probe = parser.add_mutually_exclusive_group()
+    git_probe.add_argument(
+        "--git-probe",
+        dest="git_probe",
         action="store_true",
         default=argparse.SUPPRESS if suppress_defaults else False,
-        help="skip current read-only Git state verification",
+        help="opt in to hardened current Git state verification",
+    )
+    git_probe.add_argument(
+        "--no-git-probe",
+        dest="git_probe",
+        action="store_false",
+        default=argparse.SUPPRESS if suppress_defaults else False,
+        help="disable Git state verification (the default; retained for compatibility)",
     )
     parser.add_argument(
         "--include-unindexed",
@@ -79,10 +88,11 @@ def _add_common(parser: argparse.ArgumentParser, *, suppress_defaults: bool = Fa
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     source_root = resolve_source_root(args.root)
-    probe_git = not args.no_git_probe
-    cache_status = "disabled" if args.no_cache else "refreshed"
+    probe_git = args.git_probe
+    cache_available = cache_supported()
+    cache_status = "disabled" if args.no_cache else ("refreshed" if cache_available else "unsupported")
     report = None
-    if args.command != "scan" and not args.no_cache and not args.refresh:
+    if args.command != "scan" and not args.no_cache and not args.refresh and cache_available:
         cached = load_report(
             source_root,
             probe_git=probe_git,
@@ -98,19 +108,23 @@ def main(argv: Sequence[str] | None = None) -> int:
             probe_git=probe_git,
             include_unindexed=args.include_unindexed,
         )
-        if not args.no_cache and source_root.is_dir():
-            try:
-                write_report(
-                    report,
-                    source_root,
-                    probe_git=probe_git,
-                    include_unindexed=args.include_unindexed,
-                )
-            except (OSError, CacheError):
-                cache_status = "write_failed"
-                print("Could not write the derived snapshot; results are still available.", file=sys.stderr)
+        source_has_errors = any(item.severity == "error" for item in report.diagnostics)
+        if not args.no_cache and cache_available:
+            if not source_root.is_dir() or source_has_errors:
+                cache_status = "not_written"
             else:
-                cache_status = "refreshed"
+                try:
+                    write_report(
+                        report,
+                        source_root,
+                        probe_git=probe_git,
+                        include_unindexed=args.include_unindexed,
+                    )
+                except (OSError, CacheError):
+                    cache_status = "write_failed"
+                    print("Could not write the derived snapshot; results are still available.", file=sys.stderr)
+                else:
+                    cache_status = "refreshed"
 
     if args.command == "scan":
         payload = report.to_dict()
@@ -145,7 +159,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 print(json.dumps(error, ensure_ascii=False, indent=2))
             else:
                 print(f"Project not found or ambiguous: {redact(args.name)}", file=sys.stderr)
-            return 2
+            return 1 if any(item.severity == "error" for item in report.diagnostics) else 2
         payload = {
             "schema_version": report.schema_version,
             "generated_at": report.generated_at,
@@ -158,7 +172,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(json.dumps(payload, ensure_ascii=False, indent=2))
     else:
         sys.stdout.write(rendered)
-    return 0
+    return 1 if any(item.severity == "error" for item in report.diagnostics) else 0
 
 
 if __name__ == "__main__":

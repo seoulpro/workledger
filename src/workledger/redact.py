@@ -3,18 +3,108 @@
 from __future__ import annotations
 
 import re
+import unicodedata
+from collections.abc import Callable
 from pathlib import PurePath
 
 
-_RULES: tuple[tuple[re.Pattern[str], str], ...] = (
+_SECRET_KEY = r"[A-Za-z0-9_-]{1,256}"
+_SECRET_PARTS = frozenset(
+    {
+        "apikey",
+        "accesstoken",
+        "refreshtoken",
+        "authorization",
+        "authtoken",
+        "auth",
+        "password",
+        "passwd",
+        "secret",
+        "clientsecret",
+        "privatekey",
+        "cookie",
+    }
+)
+_PRIVATE_KEY_BEGIN = re.compile(
+    r"-----BEGIN(?: [A-Z0-9]{1,32})? PRIVATE KEY-----",
+    re.IGNORECASE,
+)
+_PRIVATE_KEY_END = re.compile(
+    r"-----END(?: [A-Z0-9]{1,32})? PRIVATE KEY-----",
+    re.IGNORECASE,
+)
+_SECRET_VALUE = r'''(?:"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|[^\s,;]+)'''
+
+
+def _is_secret_name(value: str) -> bool:
+    parts = [part for part in re.split(r"[_-]+", value.casefold()) if part]
+    for index, part in enumerate(parts):
+        if part in _SECRET_PARTS:
+            return True
+        if index + 1 < len(parts) and part + parts[index + 1] in _SECRET_PARTS:
+            return True
+    return False
+
+
+def _mask_quoted_secret(match: re.Match[str]) -> str:
+    key = match.group(2)
+    return f'"{key}":"[REDACTED]"' if _is_secret_name(key) else match.group(0)
+
+
+def _mask_unquoted_secret(match: re.Match[str]) -> str:
+    key = match.group(1)
+    return f"{key}=[REDACTED]" if _is_secret_name(key) else match.group(0)
+
+
+def _mask_private_key_blocks(value: str) -> str:
+    """Mask complete key blocks with one forward pass over delimiter pairs."""
+
+    pieces: list[str] = []
+    cursor = 0
+    while True:
+        begin = _PRIVATE_KEY_BEGIN.search(value, cursor)
+        if begin is None:
+            pieces.append(value[cursor:])
+            break
+        end = _PRIVATE_KEY_END.search(value, begin.end())
+        if end is None:
+            pieces.append(value[cursor : begin.start()])
+            pieces.append("[PRIVATE KEY]")
+            break
+        pieces.append(value[cursor : begin.start()])
+        pieces.append("[PRIVATE KEY]")
+        cursor = end.end()
+    return "".join(pieces)
+
+
+_RuleReplacement = str | Callable[[re.Match[str]], str]
+_RULES: tuple[tuple[re.Pattern[str], _RuleReplacement], ...] = (
     (
         re.compile(
-            r"(?i)\b(api[_-]?key|access[_-]?token|refresh[_-]?token|auth(?:orization)?|"
-            r"password|passwd|secret|cookie)\b\s*[:=]\s*(['\"]?)[^\s,;]+\2"
+            rf'''(?i)(["'])({_SECRET_KEY})\1\s*:\s*{_SECRET_VALUE}'''
         ),
-        r"\1=[REDACTED]",
+        _mask_quoted_secret,
     ),
-    (re.compile(r"(?i)\bBearer\s+[A-Za-z0-9._~+/=-]+"), "Bearer [REDACTED]"),
+    (
+        re.compile(
+            r"(?i)\b((?:Proxy-)?Authorization\s*:\s*)(Digest)\s+.*"
+        ),
+        r"\1\2 [REDACTED]",
+    ),
+    (
+        re.compile(
+            r"(?i)\b((?:Proxy-)?Authorization\s*:\s*)(Basic|Bearer)\s+[^\s,;]+"
+        ),
+        r"\1\2 [REDACTED]",
+    ),
+    (
+        re.compile(
+            rf"(?i)\b({_SECRET_KEY})\b\s*[:=]\s*"
+            rf"(?!(?:Basic|Bearer|Digest)\b){_SECRET_VALUE}"
+        ),
+        _mask_unquoted_secret,
+    ),
+    (re.compile(r"(?i)\b(Basic|Bearer)\s+[A-Za-z0-9._~+/=-]+"), r"\1 [REDACTED]"),
     (
         re.compile(
             r"\b(?:"
@@ -34,9 +124,20 @@ _RULES: tuple[tuple[re.Pattern[str], str], ...] = (
         re.compile(r"(?i)([?&](?:token|key|secret|signature|auth)=)[^&#\s]+"),
         r"\1[REDACTED]",
     ),
+    (
+        re.compile(r"(?i)\b([a-z][a-z0-9+.-]{0,63}://)[^/\s:@]*:[^/\s@]+@"),
+        r"\1[REDACTED]@",
+    ),
     (re.compile(r"(?<![\w.+-])[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}(?![\w.-])"), "[EMAIL]"),
-    (re.compile(r"(?<!\w)/(?:Users|home)/[^/\s]+(?:/[^\s:;,)]*)?"), "[PATH]"),
-    (re.compile(r"(?i)\b[A-Z]:\\Users\\[^\s:;,)]*(?:\\[^\s:;,)]*)?"), "[PATH]"),
+    (re.compile(r'''(?i)(["'])file://.*?\1'''), "[PATH]"),
+    (re.compile(r'''(["'])/(?!/).*?\1'''), "[PATH]"),
+    (re.compile(r'''(?i)(["'])[A-Z]:[\\/].*?\1'''), "[PATH]"),
+    (re.compile(r'''(["'])(?:\\\\|//).*?\1'''), "[PATH]"),
+    (re.compile(r"(?i)\bfile:///?[^\s;,)>\]}]+"), "[PATH]"),
+    (re.compile(r"(?<!\w)(?:\.\.[\\/])+(?:[^\\/\s:;,)>\]}]+[\\/]?)+"), "[PATH]"),
+    (re.compile(r"(?<![A-Za-z0-9+.-]:)(?<![/:\w])/(?:[^/\s:;,)>\]}]+/?)+"), "[PATH]"),
+    (re.compile(r"(?i)(?<!\w)[A-Z]:[\\/](?:[^\\/\s:;,)>\]}]+[\\/]?)+"), "[PATH]"),
+    (re.compile(r"(?<![:\w])(?:\\\\|//)[^\\/\s]+[\\/][^\s:;,)>\]}]+"), "[PATH]"),
     (
         re.compile(
             r"\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-"
@@ -51,7 +152,12 @@ _RULES: tuple[tuple[re.Pattern[str], str], ...] = (
 def redact(text: str, *, limit: int = 180) -> str:
     """Mask common secrets and personal paths, then bound retained text."""
 
-    compact = " ".join(text.replace("\x00", " ").split())
+    sanitized = "".join(
+        " " if unicodedata.category(character) in {"Cc", "Cf", "Cs"} else character
+        for character in text
+    )
+    compact = " ".join(sanitized.split())
+    compact = _mask_private_key_blocks(compact)
     for pattern, replacement in _RULES:
         compact = pattern.sub(replacement, compact)
     if len(compact) <= limit:
@@ -78,7 +184,7 @@ def safe_project_name(path: str | None) -> str:
 def safe_ref(value: str, *, prefix: str = "s") -> str:
     import hashlib
 
-    digest = hashlib.sha256(value.encode("utf-8", errors="replace")).hexdigest()[:10]
+    digest = hashlib.sha256(value.encode("utf-8", errors="surrogatepass")).hexdigest()[:10]
     return f"{prefix}-{digest}"
 
 

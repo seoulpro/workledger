@@ -8,8 +8,8 @@ import re
 from dataclasses import dataclass
 from typing import Any, Iterable
 
-from .adapter import CanonicalRecord
-from .model import Category, Evidence, Finding
+from .adapter import CanonicalRecord, _json_depth_is_bounded
+from .model import Category, Diagnostic, Evidence, Finding
 from .redact import redact, safe_branch
 
 
@@ -22,6 +22,17 @@ class Candidate:
     confidence: float
     evidence: Evidence
     order: int
+
+
+MAX_CANDIDATES_PER_PROJECT = 50_000
+MAX_CANDIDATES_PER_REPORT = 100_000
+MAX_FINDINGS_PER_PROJECT = 25_000
+MAX_FUZZY_MATCHES_PER_CANDIDATE = 64
+
+
+@dataclass(slots=True)
+class ExtractionBudget:
+    remaining_candidates: int = MAX_CANDIDATES_PER_REPORT
 
 
 _MARKERS: tuple[tuple[re.Pattern[str], Category, str, float], ...] = (
@@ -145,38 +156,64 @@ _DEPLOY_SUCCESS = re.compile(r"(?i)\b(?:deployed|deployment (?:succeeded|complet
 _APPROVAL_REQUIRED = re.compile(r"(?i)\b(?:approval required|needs approval|awaiting approval)\b|승인(?:이|을)? 필요")
 
 
-def extract_findings(records: Iterable[CanonicalRecord]) -> list[Finding]:
+def extract_findings(
+    records: Iterable[CanonicalRecord],
+    *,
+    diagnostics: list[Diagnostic] | None = None,
+    budget: ExtractionBudget | None = None,
+) -> list[Finding]:
     ordered = sorted(records, key=lambda record: (_time_key(record.timestamp), record.order))
     candidates: list[Candidate] = []
-    calls: dict[str, CanonicalRecord] = {}
+    calls: dict[tuple[str, str], CanonicalRecord] = {}
+    candidate_limit = min(
+        MAX_CANDIDATES_PER_PROJECT,
+        budget.remaining_candidates if budget is not None else MAX_CANDIDATES_PER_PROJECT,
+    )
 
     for record in ordered:
+        remaining = candidate_limit - len(candidates)
+        if remaining <= 0:
+            _note_budget(diagnostics, "candidate_budget_exceeded", "Additional finding candidates were skipped.")
+            break
+        correlation_origin = record.origin_key or record.session_ref
         if record.kind == "tool_call" and record.call_id:
-            calls[record.call_id] = record
+            calls[(correlation_origin, record.call_id)] = record
             continue
         if record.kind in {"tool_output", "tool_result"}:
-            call = calls.get(record.call_id or "")
-            candidates.extend(_tool_candidates(call, record))
+            call = calls.pop((correlation_origin, record.call_id or ""), None)
+            if call is None:
+                continue
+            candidates.extend(_tool_candidates(call, record)[:remaining])
             continue
         if record.kind in {"message", "compaction_summary"} and record.text:
-            candidates.extend(_text_candidates(record))
+            candidates.extend(_text_candidates(record, limit=remaining))
         elif record.kind == "session_meta":
-            candidates.extend(_metadata_candidates(record))
+            candidates.extend(_metadata_candidates(record)[:remaining])
         elif record.kind == "turn_aborted":
             reason = redact(record.text or "Turn aborted before completion")
             candidates.append(
                 _candidate(record, Category.TASK, "unknown", reason, reason, 0.74, "turn_aborted")
             )
         elif record.kind == "repository_state":
-            candidates.extend(_repository_candidates(record))
+            candidates.extend(_repository_candidates(record)[:remaining])
 
-    return _reduce(candidates)
+    if candidate_limit and len(candidates) >= candidate_limit:
+        _note_budget(
+            diagnostics,
+            "candidate_budget_exceeded",
+            "The finding-candidate safety limit was reached; later candidates may have been skipped.",
+        )
+    if budget is not None:
+        budget.remaining_candidates -= len(candidates)
+    return _reduce(candidates, diagnostics=diagnostics)
 
 
-def _text_candidates(record: CanonicalRecord) -> list[Candidate]:
+def _text_candidates(record: CanonicalRecord, *, limit: int = MAX_CANDIDATES_PER_PROJECT) -> list[Candidate]:
     result: list[Candidate] = []
     base_penalty = 0.18 if record.kind == "compaction_summary" else 0.0
     for raw_line in record.text.splitlines():
+        if len(result) >= limit:
+            break
         line = raw_line.strip()
         if not line:
             continue
@@ -263,7 +300,12 @@ def _repository_candidates(record: CanonicalRecord) -> list[Candidate]:
         )
     commit_hash = record.metadata.get("commit_hash")
     if isinstance(commit_hash, str) and re.fullmatch(r"[0-9a-fA-F]{7,64}", commit_hash):
-        cleanliness = "clean" if record.metadata.get("clean") is True else "has local changes"
+        if record.metadata.get("clean") is True:
+            cleanliness = "clean"
+        elif record.metadata.get("clean") is False:
+            cleanliness = "has local changes"
+        else:
+            cleanliness = "cleanliness unknown"
         result.append(
             _candidate(
                 record,
@@ -411,11 +453,22 @@ def _candidate(
     )
 
 
-def _reduce(candidates: list[Candidate]) -> list[Finding]:
+def _reduce(
+    candidates: list[Candidate],
+    *,
+    diagnostics: list[Diagnostic] | None = None,
+) -> list[Finding]:
     findings: list[tuple[str, Finding]] = []
+    exact: dict[tuple[Category, str], int] = {}
+    fuzzy: dict[Category, list[int]] = {}
     for candidate in candidates:
-        match_index = _matching_finding(findings, candidate)
+        match_index = exact.get((candidate.category, candidate.subject))
         if match_index is None:
+            match_index = _matching_finding(findings, candidate, fuzzy.get(candidate.category, []))
+        if match_index is None:
+            if len(findings) >= MAX_FINDINGS_PER_PROJECT:
+                _note_budget(diagnostics, "finding_budget_exceeded", "Additional findings were skipped.")
+                break
             finding_id = _finding_id(candidate.category, candidate.subject)
             findings.append(
                 (
@@ -430,8 +483,12 @@ def _reduce(candidates: list[Candidate]) -> list[Finding]:
                     ),
                 )
             )
+            match_index = len(findings) - 1
+            exact[(candidate.category, candidate.subject)] = match_index
+            fuzzy.setdefault(candidate.category, []).append(match_index)
             continue
-        subject, finding = findings[match_index]
+        _, finding = findings[match_index]
+        exact[(candidate.category, candidate.subject)] = match_index
         finding.status = candidate.status
         finding.summary = candidate.summary
         finding.confidence = candidate.confidence
@@ -444,16 +501,17 @@ def _reduce(candidates: list[Candidate]) -> list[Finding]:
     return result
 
 
-def _matching_finding(findings: list[tuple[str, Finding]], candidate: Candidate) -> int | None:
-    for index in range(len(findings) - 1, -1, -1):
+def _matching_finding(
+    findings: list[tuple[str, Finding]],
+    candidate: Candidate,
+    category_indexes: list[int],
+) -> int | None:
+    if candidate.category not in {Category.TASK, Category.APPROVAL, Category.BLOCKER, Category.DEPLOYMENT}:
+        return None
+    for index in reversed(category_indexes[-MAX_FUZZY_MATCHES_PER_CANDIDATE:]):
         subject, finding = findings[index]
-        if finding.category != candidate.category:
-            continue
-        if subject == candidate.subject:
+        if finding.category == candidate.category and _similarity(subject, candidate.subject) >= 0.72:
             return index
-        if candidate.category in {Category.TASK, Category.APPROVAL, Category.BLOCKER, Category.DEPLOYMENT}:
-            if _similarity(subject, candidate.subject) >= 0.72:
-                return index
     return None
 
 
@@ -485,9 +543,11 @@ def _command_from_input(value: Any) -> str:
                 return candidate
         return ""
     if isinstance(value, str):
+        if not _json_depth_is_bounded(value):
+            return ""
         try:
             parsed = json.loads(value)
-        except json.JSONDecodeError:
+        except (ValueError, RecursionError):
             return value
         return _command_from_input(parsed) if isinstance(parsed, dict) else value
     return ""
@@ -498,24 +558,39 @@ def _flatten(value: Any, *, limit: int = 500_000) -> str:
         return value[:limit]
     if isinstance(value, list):
         parts: list[str] = []
+        length = 0
         for item in value:
+            selected = None
             if isinstance(item, str):
-                parts.append(item)
+                selected = item
             elif isinstance(item, dict):
                 for key in ("text", "output", "content"):
                     if isinstance(item.get(key), str):
-                        parts.append(item[key])
+                        selected = item[key]
                         break
-            if sum(map(len, parts)) >= limit:
+            if selected:
+                remaining = limit - length
+                if remaining <= 0:
+                    break
+                selected = selected[:remaining]
+                parts.append(selected)
+                length += len(selected)
+            if length >= limit:
                 break
         return "\n".join(parts)[:limit]
     if isinstance(value, dict):
         try:
             return json.dumps(value, ensure_ascii=False)[:limit]
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, RecursionError):
             return ""
     return "" if value is None else str(value)[:limit]
 
 
 def _time_key(value: str | None) -> tuple[int, str]:
     return (0, value) if value else (1, "")
+
+
+def _note_budget(diagnostics: list[Diagnostic] | None, code: str, detail: str) -> None:
+    if diagnostics is None or any(item.code == code for item in diagnostics):
+        return
+    diagnostics.append(Diagnostic(code=code, count=1, severity="warning", detail=detail))
