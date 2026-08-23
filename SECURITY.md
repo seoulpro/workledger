@@ -26,6 +26,18 @@ replacement or permissions, and disclosure of credentials, identities, source pa
 messages through generated output.
 
 WorkLedger is a privacy-conscious reporting tool, not a security boundary. It reads files and runs
-read-only Git commands with the invoking user's existing permissions. Its masking rules reduce
-accidental disclosure but cannot recognize every secret that arbitrary prose may contain. Review
-generated output before sharing it.
+read-only Git commands with the invoking user's existing permissions only when `--git-probe` is
+explicitly selected. Repository probing ignores Git-specific environment overrides and disables
+fsmonitor, hooks, optional locks, credential helpers, and terminal prompts. Relative, network-style,
+symlinked, reparse-point, and gitfile-indirected repository paths are not probed. Worktree status is
+not inspected, preventing repository-configured clean or process filters from running. The validated
+repository path identity is checked again around branch and HEAD reads so replacement paths are
+discarded rather than reported.
+
+Parsing, correlation, cache loading, and Git probing have fixed resource ceilings. A ceiling produces
+a diagnostic and safe partial result, or an invalid-cache miss, rather than silently continuing.
+Masking and Markdown escaping reduce accidental disclosure but cannot recognize every secret that
+arbitrary prose may contain. Review generated output before sharing it.
+
+Secure derived snapshots currently require POSIX directory-descriptor and no-follow semantics. On
+other platforms the CLI reports caching as unsupported and continues with an in-memory scan.

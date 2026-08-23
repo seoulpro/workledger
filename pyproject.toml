@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "session-workledger"
-version = "0.1.0a1"
+version = "0.1.0a2"
 description = "Local-first reconstruction of decisions and unfinished work from Codex sessions"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -17,6 +17,9 @@ classifiers = [
   "Programming Language :: Python :: 3 :: Only",
 ]
 dependencies = []
+
+[project.optional-dependencies]
+test = ["coverage[toml]==7.15.4"]
 
 [project.urls]
 Homepage = "https://github.com/seoulpro/workledger"
@@ -33,3 +36,8 @@ where = ["src"]
 [tool.coverage.run]
 branch = true
 source = ["workledger"]
+
+[tool.coverage.report]
+fail_under = 75
+show_missing = true
+skip_covered = true
