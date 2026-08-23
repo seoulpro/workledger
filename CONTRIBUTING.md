@@ -11,6 +11,9 @@ WorkLedger requires Python 3.10 or newer and has no runtime dependencies.
 ```sh
 PYTHONPATH=src python -m unittest discover -s tests -v
 PYTHONPATH=src python scripts/evaluate.py
+python -m pip install ".[test]"
+python -m coverage run -m unittest discover -s tests -v
+python -m coverage report
 ```
 
 Add tests for behavior changes. Fixtures must be synthetic and must not contain copied session
