@@ -5,6 +5,7 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
 
 import workledger.adapter as adapter_module
@@ -15,6 +16,31 @@ FIXTURE_ROOT = Path(__file__).parent / "fixtures" / "mixed"
 
 
 class SessionAdapterTests(unittest.TestCase):
+    def test_windows_file_identity_ignores_path_stat_device_placeholder(self) -> None:
+        path_metadata = SimpleNamespace(
+            st_dev=0,
+            st_ino=123,
+            st_size=456,
+            st_mtime_ns=789,
+            st_ctime_ns=1011,
+        )
+        descriptor_metadata = SimpleNamespace(
+            st_dev=42,
+            st_ino=123,
+            st_size=456,
+            st_mtime_ns=789,
+            st_ctime_ns=1011,
+        )
+
+        with mock.patch("workledger.adapter.os.name", "nt"):
+            self.assertTrue(
+                adapter_module._same_file(path_metadata, descriptor_metadata)
+            )
+            self.assertEqual(
+                adapter_module._stat_signature(path_metadata),
+                adapter_module._stat_signature(descriptor_metadata),
+            )
+
     def test_handles_malformed_duplicate_compacted_and_old_records(self) -> None:
         adapted = SessionAdapter(FIXTURE_ROOT).scan()
 

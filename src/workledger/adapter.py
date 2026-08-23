@@ -131,12 +131,14 @@ def _open_source_file(
 
 
 def _same_file(left: os.stat_result, right: os.stat_result) -> bool:
+    if os.name == "nt":
+        return left.st_ino != 0 and left.st_ino == right.st_ino
     return (left.st_dev, left.st_ino) == (right.st_dev, right.st_ino)
 
 
 def _stat_signature(metadata: os.stat_result) -> tuple[int, int, int, int, int]:
     return (
-        metadata.st_dev,
+        0 if os.name == "nt" else metadata.st_dev,
         metadata.st_ino,
         metadata.st_size,
         metadata.st_mtime_ns,
