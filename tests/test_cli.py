@@ -3,10 +3,11 @@ from __future__ import annotations
 import contextlib
 import io
 import json
+import tempfile
 import unittest
 from pathlib import Path
 
-from workledger.cli import main
+from workledger.cli import build_parser, main
 
 
 FIXTURE_ROOT = Path(__file__).parent / "fixtures" / "mixed"
@@ -27,6 +28,14 @@ class CliTests(unittest.TestCase):
         self.assertEqual(error, "")
         self.assertIn("# WorkLedger scan", output)
         self.assertIn("malformed_json", output)
+
+    def test_git_probe_is_explicit_opt_in(self) -> None:
+        parser = build_parser()
+
+        self.assertFalse(parser.parse_args(["scan"]).git_probe)
+        self.assertTrue(parser.parse_args(["scan", "--git-probe"]).git_probe)
+        self.assertTrue(parser.parse_args(["--git-probe", "scan"]).git_probe)
+        self.assertFalse(parser.parse_args(["scan", "--no-git-probe"]).git_probe)
 
     def test_projects_json(self) -> None:
         result, output, _ = self.invoke("projects", "--json")
@@ -58,6 +67,19 @@ class CliTests(unittest.TestCase):
 
         self.assertEqual(result, 2)
         self.assertIn("Project not found", error)
+
+    def test_missing_source_returns_one_and_machine_readable_diagnostic(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            missing = Path(temporary) / "missing"
+            stdout = io.StringIO()
+            with contextlib.redirect_stdout(stdout):
+                result = main(
+                    ["scan", "--root", str(missing), "--no-cache", "--json"]
+                )
+
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(result, 1)
+        self.assertIn("source_missing", {item["code"] for item in payload["diagnostics"]})
 
 
 if __name__ == "__main__":
