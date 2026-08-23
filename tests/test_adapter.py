@@ -22,7 +22,7 @@ class SessionAdapterTests(unittest.TestCase):
             st_ino=123,
             st_size=456,
             st_mtime_ns=789,
-            st_ctime_ns=1011,
+            st_ctime_ns=2022,
         )
         descriptor_metadata = SimpleNamespace(
             st_dev=42,
