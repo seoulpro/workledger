@@ -4,7 +4,7 @@ WorkLedger is a local-first, read-only CLI that reconstructs project state from 
 records. It focuses on decisions, unfinished tasks, approvals, blockers, work branches, commits,
 and deployments instead of presenting a chronological chat transcript.
 
-**Status: security-hardened alpha `0.1.0a2` (unreleased).** Input, cache, rendering, and optional
+**Status: security-hardened alpha `0.1.0a2`.** Input, cache, rendering, and optional
 repository probing fail safely under explicit resource limits. Natural-language accuracy has not
 yet been calibrated on a representative real-world labeled corpus, so treat findings as reviewable
 leads, not authoritative project state.
