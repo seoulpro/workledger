@@ -413,7 +413,7 @@ class SessionAdapterTests(unittest.TestCase):
                         index.write_text(
                             json.dumps(
                                 {
-                                    "id": "different-session",
+                                    "id": "different-session-with-distinct-size",
                                     "updated_at": "2026-01-01T00:00:00Z",
                                 }
                             )
