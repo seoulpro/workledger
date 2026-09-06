@@ -19,7 +19,7 @@ classifiers = [
 dependencies = []
 
 [project.optional-dependencies]
-test = ["coverage[toml]==7.15.4"]
+test = ["coverage[toml]==7.16.0"]
 
 [project.urls]
 Homepage = "https://github.com/seoulpro/workledger"
